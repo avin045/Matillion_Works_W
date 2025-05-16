@@ -1,0 +1,219 @@
+type: "orchestration"
+version: "1.0"
+pipeline:
+  components:
+    Start:
+      type: "start"
+      transitions:
+        unconditional:
+        - "Print Variables"
+      parameters:
+        componentName: "Start"
+    Print Variables:
+      type: "print-variables"
+      transitions:
+        success:
+        - "Database Query"
+      skipped: false
+      parameters:
+        componentName: "Print Variables"
+        variablesToPrint:
+        - - "TABLE_CATALOG"
+        - - "TABLE_SCHEMA"
+        - - "TABLE_NAME"
+        prefixText: ""
+        includeVariableName: "Yes"
+      postProcessing:
+        updateScalarVariables:
+        - - "TABLE_NAME"
+          - "${TABLE_NAME}"
+    Database Query:
+      type: "database-query"
+      transitions:
+        success:
+        - "Query Result To Scalar"
+      skipped: false
+      parameters:
+        componentName: "Database Query"
+        basicAdvancedMode: "Advanced"
+        databaseType: "Snowflake"
+        connectionUrl: "jdbc:snowflake://nzefhhx-lg42617.snowflakecomputing.com"
+        username: "black045"
+        password: "SNOWFLAKE-BLACK-PWD"
+        connectionOptions:
+        sqlQuery: "select * from ${TABLE_CATALOG}.${TABLE_SCHEMA}.${TABLE_NAME}"
+        fetchSize:
+        type: "Standard"
+        primaryKeys:
+        warehouse1: "[Environment Default]"
+        database: "[Environment Default]"
+        schema: "INCREMENTAL_LOAD"
+        targetTable: "tbl_${TABLE_NAME}"
+        stage1: "[Custom]"
+        stagePlatform: "Snowflake Managed"
+        loadOptions:
+        sshTunnel:
+      postProcessing:
+        updateScalarVariables:
+        - - "COMPONENT_ERROR"
+          - "${sysvar.thisComponent.message}"
+        - - "COMPONENT_NAME"
+          - "${sysvar.thisComponent.name}"
+        - - "COMPONENT_STATUS"
+          - "${sysvar.thisComponent.status}"
+    Retry:
+      type: "retry"
+      iterationTarget: "SQL Script"
+      parameters:
+        componentName: "Retry"
+        numberOfRetries: "0"
+        retryDelay: "Short delay"
+      postProcessing:
+        updateScalarVariables:
+    SQL Script:
+      type: "sql-executor"
+      parameters:
+        componentName: "SQL Script"
+        scriptLocation: "Component"
+        declareSqlVariables: "Include selected"
+        variablesToInclude:
+        sqlScript: "/*\r\nCREATE OR REPLACE TABLE config.matillion_audit_log (\r\n\
+          \  environment_name VARCHAR,\r\n  project_id VARCHAR,\r\n  root_pipeline_execution_id\
+          \ VARCHAR,\r\n  pipeline_full_name VARCHAR,\r\n  pipeline_execution_id VARCHAR,\r\
+          \n  component_name VARCHAR,\r\n  component_status VARCHAR,\r\n  component_task_id\
+          \ VARCHAR,\r\n  component_message VARCHAR,\r\n  component_row_count VARCHAR,\r\
+          \n  component_started_at VARCHAR,\r\n  component_finished_at VARCHAR,\r\n\
+          \  component_duration_ms VARCHAR,\r\n  artifact_version_name VARCHAR,\r\n\
+          \  audit_TS TIMESTAMP,\r\n  MAX_VALUE VARCHAR\r\n);\r\n*/\r\n\r\nINSERT\
+          \ INTO config.matillion_audit_log (\r\n  environment_name,\r\n  project_id,\r\
+          \n  root_pipeline_execution_id,\r\n  pipeline_full_name,\r\n  pipeline_execution_id,\r\
+          \n  component_name,\r\n  component_status,\r\n  component_task_id,\r\n \
+          \ component_message,\r\n  component_row_count,\r\n  component_started_at,\r\
+          \n  component_finished_at,\r\n  component_duration_ms,\r\n  artifact_version_name,\r\
+          \n  audit_TS,\r\n  MAX_VALUE,\r\n  TABLE_NAME,\r\n  TABLE_SCHEMA,\r\n  TABLE_CATALOG\r\
+          \n)\r\nSELECT \r\n  $$${sysvar.environment.name}$$,\r\n  $$${sysvar.project.id}$$,\r\
+          \n  $$${sysvar.rootPipeline.executionId}$$,\r\n  $$${sysvar.thisPipeline.fullName}$$,\r\
+          \n  $$${sysvar.thisPipeline.executionId}$$,\r\n  $$${COMPONENT_NAME}$$,\r\
+          \n  $$${COMPONENT_STATUS}$$,\r\n  $$${sysvar.thisComponent.taskId}$$,\r\n\
+          \  $$${COMPONENT_ERROR}$$,\r\n  $$${sysvar.thisComponent.rowCount}$$,\r\n\
+          \  $$${sysvar.thisComponent.startedAt}$$,\r\n  $$${sysvar.thisComponent.mainTaskFinishedAt}$$,\r\
+          \n  $$${sysvar.thisComponent.mainTaskDurationMs}$$,\r\n  $$${sysvar.artifact.versionName}$$,\r\
+          \n  CURRENT_TIMESTAMP as audit_TS,\r\n  $$${MAX_VALUE}$$ AS MAX_VALUE,\r\
+          \n  $$${TABLE_NAME}$$ AS TABLE_NAME,\r\n  $$${TABLE_SCHEMA}$$ AS TABLE_SCHEMA,\r\
+          \n  $$${TABLE_CATALOG}$$ AS TABLE_CATALOG;\r\n"
+      postProcessing:
+        updateScalarVariables:
+    Query Result To Scalar:
+      type: "query-to-scalar"
+      transitions:
+        success:
+        - "Print Variables 2"
+        unconditional:
+        - "Retry"
+      parameters:
+        componentName: "Query Result To Scalar"
+        mode: "Advanced"
+        scalarVariableMapping:
+        - - "MAX_VALUE"
+          - "MAX_ID"
+        query: "select max(id) as max_id from ${TABLE_CATALOG}.${TABLE_SCHEMA}.${TABLE_NAME}\r\
+          \n\r\n--PC_MATILLIONLOADER_DB.MOVIES_SCHEMA.movie_cast\r\n\r\n/*${TABLE_CATALOG}.${TABLE_SCHEMA}.${TABLE_NAME}*/"
+      postProcessing:
+        updateScalarVariables:
+    Print Variables 2:
+      type: "print-variables"
+      parameters:
+        componentName: "Print Variables 2"
+        variablesToPrint:
+        - - "MAX_VALUE"
+        prefixText:
+        includeVariableName: "No"
+      postProcessing:
+        updateScalarVariables:
+  variables:
+    COMPONENT_ERROR:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: ""
+    TABLE_CATALOG:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: "\"\""
+    TABLE_NAME:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: "''"
+    TABLE_SCHEMA:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: "\"\""
+    COMPONENT_STATUS:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: ""
+    MAX_VALUE:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: ""
+    COMPONENT_NAME:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: ""
+design:
+  components:
+    Start:
+      position:
+        x: 0
+        "y": 0
+      tempMetlId: 1
+    Print Variables:
+      position:
+        x: 160
+        "y": 0
+      tempMetlId: 2
+    Database Query:
+      position:
+        x: 340
+        "y": 0
+      tempMetlId: 3
+    Retry:
+      position:
+        x: 680
+        "y": -30
+      tempMetlId: 4
+    SQL Script:
+      position:
+        x: 680
+        "y": -30
+      tempMetlId: 5
+    Query Result To Scalar:
+      position:
+        x: 490
+        "y": 0
+      tempMetlId: 7
+    Print Variables 2:
+      position:
+        x: 680
+        "y": 90
+      tempMetlId: 8

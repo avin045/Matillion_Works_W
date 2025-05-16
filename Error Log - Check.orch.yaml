@@ -1,0 +1,178 @@
+type: "orchestration"
+version: "1.0"
+pipeline:
+  components:
+    Start:
+      type: "start"
+      transitions:
+        unconditional:
+        - "Database Query"
+      parameters:
+        componentName: "Start"
+    Database Query:
+      type: "database-query"
+      transitions:
+        unconditional:
+        - "Print Variables"
+      skipped: false
+      parameters:
+        componentName: "Database Query"
+        basicAdvancedMode: "Advanced"
+        databaseType: "Snowflake"
+        connectionUrl: "jdbc:snowflake://nzefhhx-lg42617.snowflakecomputing.com"
+        username: "black045"
+        password: "SNOWFLAKE-BLACK-PWD"
+        connectionOptions:
+        sqlQuery: "select *,current_timestamp as ts from PC_MATILLIONLOADER_DB.INCREMENTAL_LOAD.customer_src\
+          \ where C_CUSTKEY = 1000000000000001;"
+        fetchSize:
+        type: "Standard"
+        primaryKeys:
+        warehouse1: "[Environment Default]"
+        database: "[Environment Default]"
+        schema: "INCREMENTAL_LOAD"
+        targetTable: "tpch_sf1_customer"
+        stage1: "[Custom]"
+        stagePlatform: "Snowflake Managed"
+        loadOptions:
+        - "On"
+        - "Off"
+        - "Off"
+        - ""
+        - "On"
+        - "Gzip"
+        sshTunnel:
+      postProcessing:
+        updateScalarVariables:
+        - - "COMPONENT_ERROR"
+          - "${sysvar.thisComponent.message}"
+        - - "COMPONENT_NAME"
+          - "${sysvar.thisComponent.name}"
+        - - "COMPONENT_STATUS"
+          - "${sysvar.thisComponent.status}"
+    Retry:
+      type: "retry"
+      iterationTarget: "SQL Script"
+      parameters:
+        componentName: "Retry"
+        numberOfRetries: "0"
+        retryDelay: "Short delay"
+      postProcessing:
+        updateScalarVariables:
+    SQL Script:
+      type: "sql-executor"
+      parameters:
+        componentName: "SQL Script"
+        scriptLocation: "Component"
+        declareSqlVariables: "Include selected"
+        variablesToInclude:
+        sqlScript: "/*CREATE OR REPLACE TABLE config.matillion_audit_log (\r\n  environment_name\
+          \ VARCHAR,\r\n  project_id VARCHAR,\r\n  root_pipeline_execution_id VARCHAR,\r\
+          \n  pipeline_full_name VARCHAR,\r\n  pipeline_execution_id VARCHAR,\r\n\
+          \  component_name VARCHAR,\r\n  component_status VARCHAR,\r\n  component_task_id\
+          \ VARCHAR,\r\n  component_message VARCHAR,\r\n  component_row_count VARCHAR,\r\
+          \n  component_started_at VARCHAR,\r\n  component_finished_at VARCHAR,\r\n\
+          \  component_duration_ms VARCHAR,\r\n  artifact_version_name VARCHAR,\r\n\
+          \  audit_VARCHAR TIMESTAMP\r\n);*/\r\n\r\nINSERT INTO config.matillion_audit_log\
+          \ (\r\n  environment_name,\r\n  project_id,\r\n  root_pipeline_execution_id,\r\
+          \n  pipeline_full_name,\r\n  pipeline_execution_id,\r\n  component_name,\r\
+          \n  component_status,\r\n  component_task_id,\r\n  component_message,\r\n\
+          \  component_row_count,\r\n  component_started_at,\r\n  component_finished_at,\r\
+          \n  component_duration_ms,\r\n  artifact_version_name,\r\n  audit_VARCHAR\r\
+          \n)\r\nSELECT \r\n  $$${sysvar.environment.name}$$,\r\n  $$${sysvar.project.id}$$,\r\
+          \n  $$${sysvar.rootPipeline.executionId}$$,\r\n  $$${sysvar.thisPipeline.fullName}$$,\r\
+          \n  $$${sysvar.thisPipeline.executionId}$$,\r\n  $$${COMPONENT_NAME}$$,\r\
+          \n  $$${COMPONENT_STATUS}$$,\r\n  $$${sysvar.thisComponent.taskId}$$,\r\n\
+          \  $$${COMPONENT_ERROR}$$,\r\n  $$${sysvar.thisComponent.rowCount}$$,\r\n\
+          \  $$${sysvar.thisComponent.startedAt}$$,\r\n  $$${sysvar.thisComponent.mainTaskFinishedAt}$$,\r\
+          \n  $$${sysvar.thisComponent.mainTaskDurationMs}$$,\r\n  $$${sysvar.artifact.versionName}$$,\r\
+          \n  CURRENT_TIMESTAMP;\r\n\r\n"
+      postProcessing:
+        updateScalarVariables:
+    Print Variables:
+      type: "print-variables"
+      transitions:
+        success:
+        - "Run Transformation"
+      parameters:
+        componentName: "Print Variables"
+        variablesToPrint:
+        - - "COMPONENT_NAME"
+        - - "COMPONENT_ERROR"
+        prefixText:
+        includeVariableName: "Yes"
+      postProcessing:
+        updateScalarVariables:
+    Run Transformation:
+      type: "run-transformation"
+      transitions:
+        unconditional:
+        - "Retry"
+      skipped: false
+      parameters:
+        componentName: "Run Transformation"
+        transformationJob: "Transformation.tran.yaml"
+        setScalarVariables:
+        setGridVariables:
+      postProcessing:
+        updateScalarVariables:
+        - - "COMPONENT_ERROR"
+          - "${sysvar.thisComponent.message}"
+        - - "COMPONENT_NAME"
+          - "${sysvar.thisComponent.name}"
+        - - "COMPONENT_STATUS"
+          - "${sysvar.thisComponent.status}"
+  variables:
+    COMPONENT_ERROR:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: "NULL"
+    COMPONENT_STATUS:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: "NULL"
+    COMPONENT_NAME:
+      metadata:
+        type: "TEXT"
+        description: ""
+        scope: "SHARED"
+        visibility: "PUBLIC"
+      defaultValue: "NULL"
+design:
+  components:
+    Start:
+      position:
+        x: 0
+        "y": 0
+      tempMetlId: 1
+    Database Query:
+      position:
+        x: 150
+        "y": 0
+      tempMetlId: 2
+    Retry:
+      position:
+        x: 570
+        "y": -20
+      tempMetlId: 3
+    SQL Script:
+      position:
+        x: 570
+        "y": -20
+      tempMetlId: 4
+    Print Variables:
+      position:
+        x: 290
+        "y": 0
+      tempMetlId: 5
+    Run Transformation:
+      position:
+        x: 440
+        "y": 0
+      tempMetlId: 6
